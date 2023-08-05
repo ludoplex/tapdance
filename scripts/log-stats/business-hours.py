@@ -5,11 +5,7 @@ import time
 
 START_TIME = time.mktime(time.strptime('Sun May 14 00:00:00 2017'))
 END_TIME = time.mktime(time.strptime('Sun May 21 00:00:00 2017'))
-ADJUST_TIME = 0
-
-if len(sys.argv) > 1:
-    ADJUST_TIME = int(sys.argv[1])*60*60
-
+ADJUST_TIME = int(sys.argv[1])*60*60 if len(sys.argv) > 1 else 0
 #May 26, 2017 17:25:04.079412
 
 for line in sys.stdin:
@@ -18,7 +14,14 @@ for line in sys.stdin:
     ts_mon, ts_day, ts_year, ts_time, rest = line.split(' ', 4)
 
     ts_sec, ts_usecs, = ts_time.split('.')
-    ts = time.mktime(time.strptime(ts_mon + ' ' + ts_day + ' ' + ts_year + ' ' +  ts_sec, '%b %d, %Y %H:%M:%S')) + (float(ts_usecs)/1000000)
+    ts = (
+        time.mktime(
+            time.strptime(
+                f'{ts_mon} {ts_day} {ts_year} {ts_sec}', '%b %d, %Y %H:%M:%S'
+            )
+        )
+        + float(ts_usecs) / 1000000
+    )
 
     #sp = line.split(' ', 1)
 

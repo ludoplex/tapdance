@@ -104,6 +104,7 @@ def get_squid_stats():
 
     #print(buf)
 
+reconnect = False
 while True:
     ns = subprocess.check_output(["netstat", "-pant"])
 
@@ -116,12 +117,7 @@ while True:
 
     # Clear our stats
     # This dictionary tracks per tapdance process stats about all its connections:
-    td_stats = {}  # core_num => [remote_recv_q_tot, remote_send_q_tot, remote_num_conns, <- clients
-                    #             local_recv_q_tot, local_send_q_tot, local_num_conns]    <- squid
-
-    # Init stats for squid
-    td_stats['squid'] = [0]*6
-
+    td_stats = {'squid': [0] * 6}
     for line in ns.split(b'\n'):
         try:
             tcp, recv_q, send_q, local_addr, remote_addr, state, pid_prog = line.split()[:7]
@@ -167,9 +163,8 @@ while True:
                     td_stats[core_idx][2] += 1
 
 
-    reconnect = False
     t = time.time()
-    for core_idx in td_stats.keys():
+    for core_idx in td_stats:
         remote_recv_q_tot, remote_send_q_tot, remote_num_conns, \
             local_recv_q_tot, local_send_q_tot, local_num_conns = td_stats[core_idx]
 
