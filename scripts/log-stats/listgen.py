@@ -26,7 +26,15 @@ for line in sys.stdin:
         ts_mon, ts_day, ts_year, ts_time, _, core_num, inf, stat = line.strip().split(' ', 7)
 
         ts_sec, ts_usecs, = ts_time.split('.')
-        ts = time.mktime(time.strptime(ts_mon + ' ' + ts_day + ' ' + ts_year + ' ' +  ts_sec, '%b %d, %Y %H:%M:%S')) + (float(ts_usecs)/1000000)
+        ts = (
+            time.mktime(
+                time.strptime(
+                    f'{ts_mon} {ts_day} {ts_year}' + ' ' + ts_sec,
+                    '%b %d, %Y %H:%M:%S',
+                )
+            )
+            + float(ts_usecs) / 1000000
+        )
 
         if stat.startswith('listgen'):
             _, conn_id, gen = stat.split(' ')
@@ -46,7 +54,7 @@ for line in sys.stdin:
 
 # get columns
 columns = set()
-for bucket in gen_times.keys():
+for bucket in gen_times:
     for gen in gen_times[bucket].keys():
         columns.add(gen)
 
@@ -56,7 +64,7 @@ for c in columns:
 
 sys.stdout.write('\n')
 
-for bucket in gen_times.keys():
+for bucket in gen_times:
 
     bin_time = bucket*BUCKET_SIZE
     sys.stdout.write('%d  ' % bin_time)

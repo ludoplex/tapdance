@@ -15,7 +15,7 @@ for line in sys.stdin:
     if f is None or day != last_day:
         if f is not None:
             f.close()
-        f = open('./data/session-%s.out' % day, 'w')
+        f = open(f'./data/session-{day}.out', 'w')
 
     f.write(line)
     last_day = day

@@ -132,8 +132,7 @@ def find_module(mod):
     the script '''
     # check $RTE_SDK/$RTE_TARGET directory
     if 'RTE_SDK' in os.environ and 'RTE_TARGET' in os.environ:
-        path = "%s/%s/kmod/%s.ko" % (os.environ['RTE_SDK'],
-                                     os.environ['RTE_TARGET'], mod)
+        path = f"{os.environ['RTE_SDK']}/{os.environ['RTE_TARGET']}/kmod/{mod}.ko"
         if exists(path):
             return path
 
@@ -152,7 +151,7 @@ def find_module(mod):
     tools_dir = dirname(abspath(sys.argv[0]))
     if (tools_dir.endswith("tools")):
         base_dir = dirname(tools_dir)
-        find_out = check_output(["find", base_dir, "-name", mod + ".ko"])
+        find_out = check_output(["find", base_dir, "-name", f"{mod}.ko"])
         if len(find_out) > 0:  # something matched
             path = find_out.splitlines()[0]
             if exists(path):
@@ -221,7 +220,7 @@ def get_pci_device_details(dev_id):
         name = name.strip(":") + "_str"
         device[name] = value
     # check for a unix interface name
-    sys_path = "/sys/bus/pci/devices/%s/net/" % dev_id
+    sys_path = f"/sys/bus/pci/devices/{dev_id}/net/"
     if exists(sys_path):
         device["Interface"] = ",".join(os.listdir(sys_path))
     else:
@@ -258,23 +257,17 @@ def get_nic_details():
             name, value = dev_line.decode().split("\t", 1)
             dev[name.rstrip(":")] = value
 
-    # check what is the interface if any for an ssh connection if
-    # any to this host, so we can mark it later.
-    ssh_if = []
     route = check_output(["ip", "-o", "route"])
     # filter out all lines for 169.254 routes
     route = "\n".join(filter(lambda ln: not ln.startswith("169.254"),
                              route.decode().splitlines()))
     rt_info = route.split()
-    for i in range(len(rt_info) - 1):
-        if rt_info[i] == "dev":
-            ssh_if.append(rt_info[i+1])
-
+    ssh_if = [rt_info[i+1] for i in range(len(rt_info) - 1) if rt_info[i] == "dev"]
     # based on the basic info, get extended text details
-    for d in devices.keys():
+    for d, value_ in devices.items():
         # get additional info and add it to existing data
         devices[d] = devices[d].copy()
-        devices[d].update(get_pci_device_details(d).items())
+        value_.update(get_pci_device_details(d).items())
 
         for _if in ssh_if:
             if _if in devices[d]["Interface"].split(","):
@@ -286,8 +279,7 @@ def get_nic_details():
         if "Module_str" in devices[d]:
             for driver in dpdk_drivers:
                 if driver not in devices[d]["Module_str"]:
-                    devices[d]["Module_str"] = \
-                        devices[d]["Module_str"] + ",%s" % driver
+                    devices[d]["Module_str"] = devices[d]["Module_str"] + f",{driver}"
         else:
             devices[d]["Module_str"] = ",".join(dpdk_drivers)
 
@@ -307,9 +299,8 @@ def dev_id_from_dev_name(dev_name):
     # check if it's already a suitable index
     if dev_name in devices:
         return dev_name
-    # check if it's an index just missing the domain part
-    elif "0000:" + dev_name in devices:
-        return "0000:" + dev_name
+    elif f"0000:{dev_name}" in devices:
+        return f"0000:{dev_name}"
     else:
         # check if it's an interface name, e.g. eth1
         for d in devices.keys():
@@ -336,12 +327,11 @@ def unbind_one(dev_id, force):
         return
 
     # write to /sys to unbind
-    filename = "/sys/bus/pci/drivers/%s/unbind" % dev["Driver_str"]
+    filename = f'/sys/bus/pci/drivers/{dev["Driver_str"]}/unbind'
     try:
         f = open(filename, "a")
     except:
-        print("Error: unbind failed for %s - Cannot open %s"
-              % (dev_id, filename))
+        print(f"Error: unbind failed for {dev_id} - Cannot open {filename}")
         sys.exit(1)
     f.write(dev_id)
     f.close()
@@ -350,13 +340,14 @@ def unbind_one(dev_id, force):
 def bind_one(dev_id, driver, force):
     '''Bind the device given by "dev_id" to the driver "driver". If the device
     is already bound to a different driver, it will be unbound first'''
-    dev = devices[dev_id]
     saved_driver = None  # used to rollback any unbind in case of failure
 
+    dev = devices[dev_id]
     # prevent disconnection of our ssh session
     if dev["Ssh_if"] and not force:
-        print("Routing table indicates that interface %s is active. "
-              "Not modifying" % (dev_id))
+        print(
+            f"Routing table indicates that interface {dev_id} is active. Not modifying"
+        )
         return
 
     # unbind any existing drivers we don't want
@@ -372,28 +363,27 @@ def bind_one(dev_id, driver, force):
 
     # if we are binding to one of DPDK drivers, add PCI id's to that driver
     if driver in dpdk_drivers:
-        filename = "/sys/bus/pci/drivers/%s/new_id" % driver
+        filename = f"/sys/bus/pci/drivers/{driver}/new_id"
         try:
             f = open(filename, "w")
         except:
-            print("Error: bind failed for %s - Cannot open %s"
-                  % (dev_id, filename))
+            print(f"Error: bind failed for {dev_id} - Cannot open {filename}")
             return
         try:
             f.write("%04x %04x" % (dev["Vendor"], dev["Device"]))
             f.close()
         except:
-            print("Error: bind failed for %s - Cannot write new PCI ID to "
-                  "driver %s" % (dev_id, driver))
+            print(
+                f"Error: bind failed for {dev_id} - Cannot write new PCI ID to driver {driver}"
+            )
             return
 
     # do the bind by writing to /sys
-    filename = "/sys/bus/pci/drivers/%s/bind" % driver
+    filename = f"/sys/bus/pci/drivers/{driver}/bind"
     try:
         f = open(filename, "a")
     except:
-        print("Error: bind failed for %s - Cannot open %s"
-              % (dev_id, filename))
+        print(f"Error: bind failed for {dev_id} - Cannot open {filename}")
         if saved_driver is not None:  # restore any previous driver
             bind_one(dev_id, saved_driver, force)
         return
@@ -407,8 +397,7 @@ def bind_one(dev_id, driver, force):
         tmp = get_pci_device_details(dev_id)
         if "Driver_str" in tmp and tmp["Driver_str"] == driver:
             return
-        print("Error: bind failed for %s - Cannot bind to driver %s"
-              % (dev_id, driver))
+        print(f"Error: bind failed for {dev_id} - Cannot bind to driver {driver}")
         if saved_driver is not None:  # restore any previous driver
             bind_one(dev_id, saved_driver, force)
         return
@@ -462,10 +451,9 @@ def display_devices(title, dev_list, extra_params=None):
     else:
         for dev in dev_list:
             if extra_params is not None:
-                strings.append("%s '%s' %s" % (dev["Slot"],
-                               dev["Device_str"], extra_params % dev))
+                strings.append(f"""{dev["Slot"]} '{dev["Device_str"]}' {extra_params % dev}""")
             else:
-                strings.append("%s '%s'" % (dev["Slot"], dev["Device_str"]))
+                strings.append(f"""{dev["Slot"]} '{dev["Device_str"]}'""")
     # sort before printing, so that the entries appear in PCI order
     strings.sort()
     print("\n".join(strings))  # print one per line
@@ -515,26 +503,23 @@ def parse_args():
                                    ["help", "usage", "status", "force",
                                     "bind=", "unbind"])
     except getopt.GetoptError as error:
-        print(str(error))
-        print("Run '%s --usage' for further information" % sys.argv[0])
+        print(error)
+        print(f"Run '{sys.argv[0]} --usage' for further information")
         sys.exit(1)
 
     for opt, arg in opts:
-        if opt == "--help" or opt == "--usage":
+        if opt in ["--help", "--usage"]:
             usage()
             sys.exit(0)
-        if opt == "--status" or opt == "-s":
+        if opt in ["--status", "-s"]:
             status_flag = True
         if opt == "--force":
             force_flag = True
-        if opt == "-b" or opt == "-u" or opt == "--bind" or opt == "--unbind":
+        if opt in ["-b", "-u", "--bind", "--unbind"]:
             if b_flag is not None:
                 print("Error - Only one bind or unbind may be specified\n")
                 sys.exit(1)
-            if opt == "-u" or opt == "--unbind":
-                b_flag = "none"
-            else:
-                b_flag = arg
+            b_flag = "none" if opt in ["-u", "--unbind"] else arg
 
 
 def do_arg_actions():
@@ -547,15 +532,15 @@ def do_arg_actions():
     if b_flag is None and not status_flag:
         print("Error: No action specified for devices."
               "Please give a -b or -u option")
-        print("Run '%s --usage' for further information" % sys.argv[0])
+        print(f"Run '{sys.argv[0]} --usage' for further information")
         sys.exit(1)
 
     if b_flag is not None and len(args) == 0:
         print("Error: No devices specified.")
-        print("Run '%s --usage' for further information" % sys.argv[0])
+        print(f"Run '{sys.argv[0]} --usage' for further information")
         sys.exit(1)
 
-    if b_flag == "none" or b_flag == "None":
+    if b_flag in ["none", "None"]:
         unbind_all(args, force_flag)
     elif b_flag is not None:
         bind_all(args, b_flag, force_flag)
